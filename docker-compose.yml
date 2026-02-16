@@ -1,0 +1,80 @@
+services:
+  # ── Base de données MySQL ──
+  db:
+    image: mysql:8.0
+    container_name: medical_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password_secure}
+      MYSQL_DATABASE: ${DB_NAME:-medical_system}
+      MYSQL_USER: ${DB_USER:-medical_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-medical_password_secure}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - medical_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend API (Node.js + Express) ──
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: medical_backend
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-medical_system}
+      DB_USER: ${DB_USER:-medical_user}
+      DB_PASSWORD: ${DB_PASSWORD:-medical_password_secure}
+      JWT_SECRET: ${JWT_SECRET:-cle_secrete_jwt_production_2025}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6}
+      FRONTEND_URL: http://localhost
+    ports:
+      - "5000:5000"
+    volumes:
+      - uploads_data:/app/uploads
+      - logs_data:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - medical_network
+
+  # ── Frontend (React + Nginx) ──
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: medical_frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+    networks:
+      - medical_network
+
+# ── Volumes persistants (chiffrement possible avec driver) ──
+volumes:
+  mysql_data:
+    driver: local
+  uploads_data:
+    driver: local
+  logs_data:
+    driver: local
+
+# ── Réseau isolé ──
+networks:
+  medical_network:
+    driver: bridge
